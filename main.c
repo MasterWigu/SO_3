@@ -10,39 +10,48 @@
 #include "matrix2d.h"
 
 
+pthread_mutex_t mutex;
+pthread_cond_t condition;
+DoubleMatrix2D *matrix, *matrix_aux;
+
+
 /*--------------------------------------------------------------------
 | Function: simul
 ---------------------------------------------------------------------*/
 
-DoubleMatrix2D *simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int linhas, int colunas, int numIteracoes) {
+void simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int linhas, int colunas, int tam_fatia, int id) {
 
-  DoubleMatrix2D *m, *aux, *tmp;
-  int iter, i, j;
+  int i, j;
   double value;
 
 
   if(linhas < 2 || colunas < 2)
     return NULL;
 
-  m = matrix;
-  aux = matrix_aux;
-
-  for (iter = 0; iter < numIteracoes; iter++) {
   
-    for (i = 1; i < linhas - 1; i++)
-      for (j = 1; j < colunas - 1; j++) {
-        value = ( dm2dGetEntry(m, i-1, j) + dm2dGetEntry(m, i+1, j) +
-		dm2dGetEntry(m, i, j-1) + dm2dGetEntry(m, i, j+1) ) / 4.0;
-        dm2dSetEntry(aux, i, j, value);
-      }
+  for (i = (tam_fatia*id+1); i <= tam_fatia*(id+1); i++)
+    for (j = 1; j < colunas - 1; j++) {
+      value = ( dm2dGetEntry(matrix, i-1, j) + dm2dGetEntry(matrix, i+1, j) +
+	              dm2dGetEntry(matrix, i, j-1) + dm2dGetEntry(matrix, i, j+1) ) / 4.0;
+                dm2dSetEntry(matrix_aux, i, j, value);
+    }
 
-    tmp = aux;
-    aux = m;
-    m = tmp;
-  }
-
-  return m;
+  return;
 }
+
+
+void *tarefa_trabalhadora(void* args) {
+  thread_info *tinfo = (thread_info *) args;
+
+
+
+}
+
+
+
+
+
+
 
 /*--------------------------------------------------------------------
 | Function: parse_integer_or_exit
@@ -95,9 +104,6 @@ int main (int argc, char** argv) {
   double tInf = parse_double_or_exit(argv[5], "tInf");
   int iteracoes = parse_integer_or_exit(argv[6], "iteracoes");
 
-  DoubleMatrix2D *matrix, *matrix_aux, *result;
-
-
   fprintf(stderr, "\nArgumentos:\n"
 	" N=%d tEsq=%.1f tSup=%.1f tDir=%.1f tInf=%.1f iteracoes=%d\n",
 	N, tEsq, tSup, tDir, tInf, iteracoes);
@@ -116,31 +122,6 @@ int main (int argc, char** argv) {
     return -1;
   }
 
-
-  /* ALTERACOES PEDIDAS  <inicio>  */
-
-  int i;
-
-  for(i=0; i<N+2; i++)
-    dm2dSetLineTo(matrix, i, i);
-  dm2dPrint(matrix);
-
-
-  for(i=0; i<N+2; i++)
-    dm2dSetColumnTo(matrix_aux, i, i);
-  dm2dPrint(matrix_aux);
-
-
-  if(3 <= N+1) {
-    double *line;
-    line = dm2dGetLine(matrix, 3);
-    dm2dSetLine(matrix_aux, 2, line);
-    dm2dPrint(matrix_aux);
-  }
-
-  /* ALTERACOES PEDIDAS  <fim>  */
-
-
   for(i=0; i<N+2; i++)
     dm2dSetLineTo(matrix, i, 0);
 
@@ -151,11 +132,33 @@ int main (int argc, char** argv) {
 
   dm2dCopy (matrix_aux, matrix);
 
-  result = simul(matrix, matrix_aux, N+2, N+2, iteracoes);
-  if (result == NULL) {
-    printf("\nErro na simulacao.\n\n");
-    return -1;
+  /* Criar Trabalhadoras */
+  for (i = 0; i < trab; i++) {
+    tinfo[i].id = i+1;
+    tinfo[i].N = N;
+    tinfo[i].iter = iter;
+    tinfo[i].trab = trab;
+    tinfo[i].tam_fatia = tam_fatia;
+    
+    res = pthread_create(&trabalhadoras[i], NULL, tarefa_trabalhadora, &tinfo[i]);
+
+    if(res != 0) {
+      fprintf(stderr, "\nErro ao criar uma tarefa trabalhadora.\n");
+      return -1;
+    }
   }
+  
+
+  /* Esperar que as Trabalhadoras Terminem */
+  for (i = 0; i < trab; i++) {
+    res = pthread_join(trabalhadoras[i], NULL);
+    
+    if (res != 0) {
+      fprintf(stderr, "\nErro ao esperar por uma tarefa trabalhadora.\n");    
+      return -1;
+    }  
+  }
+  
 
   dm2dPrint(result);
 
