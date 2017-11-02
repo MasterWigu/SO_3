@@ -15,11 +15,26 @@ pthread_cond_t condition;
 DoubleMatrix2D *matrix, *matrix_aux;
 
 
+
+/*--------------------------------------------------------------------
+| Type: thread_info
+| Description: Estrutura com Informação para Trabalhadoras
+---------------------------------------------------------------------*/
+
+typedef struct { 
+    int id;
+    int iter;
+    int N;
+    int trab;
+    int tam_fatia;
+}thread_info;
+
+
 /*--------------------------------------------------------------------
 | Function: simul
 ---------------------------------------------------------------------*/
 
-void simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int linhas, int colunas, int tam_fatia, int id) {
+void simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fatia, int id) {
 
   int i, j;
   double value;
@@ -40,17 +55,27 @@ void simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int linhas, int c
 }
 
 
+/*--------------------------------------------------------------------
+| Function: parse_integer_or_exit
+---------------------------------------------------------------------*/
+
 void *tarefa_trabalhadora(void* args) {
   thread_info *tinfo = (thread_info *) args;
 
 
+  for (i=0; i<tinfo->iter; i++) {
+    simul(matrix, matrix_aux, tinfo->N, tinfo->tam_fatia, tinfo->id);
 
+
+    pthread_
+
+
+
+ }
+
+
+ return;
 }
-
-
-
-
-
 
 
 /*--------------------------------------------------------------------
@@ -120,6 +145,18 @@ int main (int argc, char** argv) {
   if (matrix == NULL || matrix_aux == NULL) {
     fprintf(stderr, "\nErro: Nao foi possivel alocar memoria para as matrizes.\n\n");
     return -1;
+  }
+
+
+
+  if(pthread_mutex_init(&mutex, NULL) != 0) {
+    fprintf(stderr, "\nErro ao inicializar mutex\n");
+    return NULL;
+  }
+
+  if(pthread_cond_init(&condition, NULL) != 0) {
+    fprintf(stderr, "\nErro ao inicializar variável de condição\n");
+    return NULL;
   }
 
   for(i=0; i<N+2; i++)
