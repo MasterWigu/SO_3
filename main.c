@@ -6,14 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <pthread.h>
 
 #include "matrix2d.h"
+#include "barreira.h"
 
-
-pthread_mutex_t mutex;
-pthread_cond_t condition;
 DoubleMatrix2D *matrix, *matrix_aux;
-
 
 
 /*--------------------------------------------------------------------
@@ -23,7 +21,6 @@ DoubleMatrix2D *matrix, *matrix_aux;
 
 typedef struct { 
     int id;
-    int iter;
     int N;
     int trab;
     int tam_fatia;
@@ -31,27 +28,36 @@ typedef struct {
 
 
 /*--------------------------------------------------------------------
+| Function: absl
+---------------------------------------------------------------------*/
+int absl(int num) {
+  if (num < 0)
+    return -num;
+  return num;
+}
+
+/*--------------------------------------------------------------------
 | Function: simul
 ---------------------------------------------------------------------*/
 
-void simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fatia, int id) {
+int simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fatia, int id) {
 
-  int i, j;
+  int i, j, desvio = -1, desvio_local;
   double value;
-
-
-  if(linhas < 2 || colunas < 2)
-    return NULL;
 
   
   for (i = (tam_fatia*id+1); i <= tam_fatia*(id+1); i++)
-    for (j = 1; j < colunas - 1; j++) {
+    for (j = 1; j < N - 1; j++) {
       value = ( dm2dGetEntry(matrix, i-1, j) + dm2dGetEntry(matrix, i+1, j) +
 	              dm2dGetEntry(matrix, i, j-1) + dm2dGetEntry(matrix, i, j+1) ) / 4.0;
                 dm2dSetEntry(matrix_aux, i, j, value);
+
+      desvio_local = absl(dm2dGetEntry(matrix, i, j) - dm2dGetEntry(matrix_aux, i, j));
+      if (desvio_local > desvio)
+        desvio = desvio_local;
     }
 
-  return;
+  return desvio;
 }
 
 
@@ -61,20 +67,21 @@ void simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fa
 
 void *tarefa_trabalhadora(void* args) {
   thread_info *tinfo = (thread_info *) args;
+  int i, desvio, retorno;
 
+  for (i=0;; i++) {
+    desvio = simul(matrix, matrix_aux, tinfo->N, tinfo->tam_fatia, tinfo->id);
+    retorno = waitBarreira(i, desvio);
 
-  for (i=0; i<tinfo->iter; i++) {
-    simul(matrix, matrix_aux, tinfo->N, tinfo->tam_fatia, tinfo->id);
+    if (retorno == -1) {
+      fprintf(stderr, "Erro ao esperar pela barreira\n");
+      exit(-1);
+    }
 
-
-    pthread_
-
-
-
+    if (retorno == 1)
+      return NULL;
  }
-
-
- return;
+ return NULL;
 }
 
 
@@ -115,9 +122,9 @@ double parse_double_or_exit(char const *str, char const *name)
 
 int main (int argc, char** argv) {
 
-  if(argc != 7) {
+  if(argc != 8) {
     fprintf(stderr, "\nNumero invalido de argumentos.\n");
-    fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf iteracoes\n\n");
+    fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf trabalhadoras\n\n");
     return 1;
   }
 
@@ -127,15 +134,16 @@ int main (int argc, char** argv) {
   double tSup = parse_double_or_exit(argv[3], "tSup");
   double tDir = parse_double_or_exit(argv[4], "tDir");
   double tInf = parse_double_or_exit(argv[5], "tInf");
-  int iteracoes = parse_integer_or_exit(argv[6], "iteracoes");
+  int trab = parse_integer_or_exit(argv[6], "trabalhadoras");
+  double desvio = parse_double_or_exit(argv[7], "desvio");
 
   fprintf(stderr, "\nArgumentos:\n"
-	" N=%d tEsq=%.1f tSup=%.1f tDir=%.1f tInf=%.1f iteracoes=%d\n",
-	N, tEsq, tSup, tDir, tInf, iteracoes);
+	" N=%d tEsq=%.1f tSup=%.1f tDir=%.1f tInf=%.1f trabalhadoras=%d desvioMax=%.4f\n",
+	N, tEsq, tSup, tDir, tInf, trab, desvio);
 
-  if(N < 1 || tEsq < 0 || tSup < 0 || tDir < 0 || tInf < 0 || iteracoes < 1) {
+  if(N < 1 || tEsq < 0 || tSup < 0 || tDir < 0 || tInf < 0 || trab < 1 || desvio < 0) {
     fprintf(stderr, "\nErro: Argumentos invalidos.\n"
-	" Lembrar que N >= 1, temperaturas >= 0 e iteracoes >= 1\n\n");
+	" Lembrar que N >= 1, temperaturas >= 0, trabalhadoras >= 1, desvio >= 0\n\n");
     return 1;
   }
 
@@ -147,16 +155,20 @@ int main (int argc, char** argv) {
     return -1;
   }
 
-
+  int i, tam_fatia, res;
+  pthread_mutex_t mutex;
+  pthread_cond_t condition;
+  pthread_t trabalhadoras[trab];
+  thread_info tinfo[trab];
 
   if(pthread_mutex_init(&mutex, NULL) != 0) {
     fprintf(stderr, "\nErro ao inicializar mutex\n");
-    return NULL;
+    return -1;
   }
 
   if(pthread_cond_init(&condition, NULL) != 0) {
     fprintf(stderr, "\nErro ao inicializar variável de condição\n");
-    return NULL;
+    return -1;
   }
 
   for(i=0; i<N+2; i++)
@@ -169,11 +181,17 @@ int main (int argc, char** argv) {
 
   dm2dCopy (matrix_aux, matrix);
 
+  if (initBarreira(trab, desvio) == -1) {
+    fprintf(stderr, "\nErro a criar barreira\n");
+    return -1;
+  }
+
+  tam_fatia = N/trab;
+
   /* Criar Trabalhadoras */
   for (i = 0; i < trab; i++) {
     tinfo[i].id = i+1;
     tinfo[i].N = N;
-    tinfo[i].iter = iter;
     tinfo[i].trab = trab;
     tinfo[i].tam_fatia = tam_fatia;
     
@@ -197,10 +215,11 @@ int main (int argc, char** argv) {
   }
   
 
-  dm2dPrint(result);
+  dm2dPrint(matrix);
 
   dm2dFree(matrix);
   dm2dFree(matrix_aux);
+  destroyBarreira();
 
   return 0;
 }
