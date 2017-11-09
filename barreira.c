@@ -58,12 +58,11 @@ int waitBarreira(int iter, int desvio_fatia) {
 		printf("AASDSDSD\n");
 		while (*espera_activa != 0) {
 			pthread_cond_wait(&stop->condition, &stop->mutex);
-
-			if (stop->desvio_fatias_temp < stop->desvio_max)
-				return 1;
 		}
 	}
 	pthread_mutex_unlock(&stop->mutex);
+	if (stop->desvio_fatias_temp < stop->desvio_max)
+		return 1;
 	return 0;
 }
 
