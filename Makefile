@@ -23,3 +23,4 @@ clean_zip:
 
 zip:
 	zip proj1.zip main.c barreira.c barreira.h matrix2d.c matrix2d.h Makefile
+

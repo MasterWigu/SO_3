@@ -24,6 +24,7 @@ typedef struct {
     int N;
     int trab;
     int tam_fatia;
+    int iter;
 }thread_info;
 
 
@@ -68,10 +69,17 @@ int simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fat
 void *tarefa_trabalhadora(void* args) {
   thread_info *tinfo = (thread_info *) args;
   int i, desvio, retorno;
+  int iter = tinfo->iter;
 
-  for (i=0;; i++) {
+  for (i=0;i<iter; i++) {
     desvio = simul(matrix, matrix_aux, tinfo->N, tinfo->tam_fatia, tinfo->id);
-    retorno = waitBarreira(i, desvio);
+
+    if (iter%2==0) 
+      retorno=waitBarreira1(i,desvio);
+    else {
+      retorno=waitBarreira2(i,desvio);
+
+  }
 
     if (retorno == -1) {
       fprintf(stderr, "Erro ao esperar pela barreira\n");
@@ -122,6 +130,9 @@ double parse_double_or_exit(char const *str, char const *name)
 
 int main (int argc, char** argv) {
 
+  
+
+
   if(argc != 8) {
     fprintf(stderr, "\nNumero invalido de argumentos.\n");
     fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf trabalhadoras\n\n");
@@ -156,20 +167,28 @@ int main (int argc, char** argv) {
   }
 
   int i, tam_fatia, res;
-  pthread_mutex_t mutex;
-  pthread_cond_t condition;
   pthread_t trabalhadoras[trab];
   thread_info tinfo[trab];
 
-  if(pthread_mutex_init(&mutex, NULL) != 0) {
+  /*if(pthread_mutex_init(&mutex1, NULL) != 0) {
     fprintf(stderr, "\nErro ao inicializar mutex\n");
     return -1;
   }
 
-  if(pthread_cond_init(&condition, NULL) != 0) {
+  if(pthread_mutex_init(&mutex2, NULL) != 0) {
+    fprintf(stderr, "\nErro ao inicializar mutex\n");
+    return -1;
+  }
+
+  if(pthread_cond_init(&condition1, NULL) != 0) {
     fprintf(stderr, "\nErro ao inicializar variável de condição\n");
     return -1;
   }
+
+  if(pthread_cond_init(&condition2, NULL) != 0) {
+    fprintf(stderr, "\nErro ao inicializar variável de condição\n");
+    return -1;
+  }*/
 
   for(i=0; i<N+2; i++)
     dm2dSetLineTo(matrix, i, 0);
@@ -219,6 +238,7 @@ int main (int argc, char** argv) {
 
   dm2dFree(matrix);
   dm2dFree(matrix_aux);
+
   destroyBarreira();
 
   return 0;
