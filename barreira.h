@@ -3,7 +3,7 @@
 
 
 int waitBarreira(int iter, int desvio);
-int initBarreira(int n_threads, int desvio_max);
+int initBarreira(int n_threads);
 void destroyBarreira();
 
 

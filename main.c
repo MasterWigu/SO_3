@@ -11,7 +11,7 @@
 #include "matrix2d.h"
 #include "barreira.h"
 
-DoubleMatrix2D *matrix, *matrix_aux;
+DoubleMatrix2D *matrix[2];
 
 
 /*--------------------------------------------------------------------
@@ -24,13 +24,15 @@ typedef struct {
     int N;
     int trab;
     int tam_fatia;
+    double maxD;
+    int iter_fim;
 }thread_info;
 
 
 /*--------------------------------------------------------------------
 | Function: absl
 ---------------------------------------------------------------------*/
-int absl(int num) {
+double absl(double num) {
   if (num < 0)
     return -num;
   return num;
@@ -40,23 +42,22 @@ int absl(int num) {
 | Function: simul
 ---------------------------------------------------------------------*/
 
-int simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fatia, int id) {
+double simul(int N, int tam_fatia, int id, int n_iter) {
 
-  int i, j, desvio = -1, desvio_local;
-  double value;
+  int i, j;
+  double value, desvio = -1, desvio_local;
 
   
-  for (i = (tam_fatia*id+1); i <= tam_fatia*(id+1); i++)
-    for (j = 1; j < N - 1; j++) {
-      value = ( dm2dGetEntry(matrix, i-1, j) + dm2dGetEntry(matrix, i+1, j) +
-	              dm2dGetEntry(matrix, i, j-1) + dm2dGetEntry(matrix, i, j+1) ) / 4.0;
-                dm2dSetEntry(matrix_aux, i, j, value);
+  for (i = (tam_fatia*(id-1)+1); i <= tam_fatia*((id-1)+1); i++)
+    for (j = 1; j <= N; j++) {
+      value = ( dm2dGetEntry(matrix[n_iter%2], i-1, j) + dm2dGetEntry(matrix[n_iter%2], i+1, j) +
+	              dm2dGetEntry(matrix[n_iter%2], i, j-1) + dm2dGetEntry(matrix[n_iter%2], i, j+1) ) / 4.0;
+                dm2dSetEntry(matrix[(n_iter+1)%2], i, j, value);
 
-      desvio_local = absl(dm2dGetEntry(matrix, i, j) - dm2dGetEntry(matrix_aux, i, j));
+      desvio_local = absl(dm2dGetEntry(matrix[(n_iter+1)%2], i, j) - dm2dGetEntry(matrix[n_iter%2], i, j));
       if (desvio_local > desvio)
         desvio = desvio_local;
     }
-
   return desvio;
 }
 
@@ -67,20 +68,29 @@ int simul(DoubleMatrix2D *matrix, DoubleMatrix2D *matrix_aux, int N, int tam_fat
 
 void *tarefa_trabalhadora(void* args) {
   thread_info *tinfo = (thread_info *) args;
-  int i, desvio, retorno;
+  int iter, flag_desvio, retorno;
+  double desvio;
 
-  for (i=0;; i++) {
-    desvio = simul(matrix, matrix_aux, tinfo->N, tinfo->tam_fatia, tinfo->id);
-    retorno = waitBarreira(i, desvio);
+  for (iter=0;; iter++) {
+    desvio = simul(tinfo->N, tinfo->tam_fatia, tinfo->id, iter);
+
+    if (desvio > tinfo->maxD)
+      flag_desvio = 0;
+    else
+      flag_desvio = 1;
+
+    retorno = waitBarreira(iter, flag_desvio);
 
     if (retorno == -1) {
       fprintf(stderr, "Erro ao esperar pela barreira\n");
       exit(-1);
     }
 
-    if (retorno == 1)
+    if (retorno == 1) {
+      tinfo->iter_fim = iter;
       return NULL;
- }
+    }
+  }
  return NULL;
 }
 
@@ -124,7 +134,7 @@ int main (int argc, char** argv) {
 
   if(argc != 8) {
     fprintf(stderr, "\nNumero invalido de argumentos.\n");
-    fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf trabalhadoras\n\n");
+    fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf trabalhadoras desvioMax\n\n");
     return 1;
   }
 
@@ -147,41 +157,30 @@ int main (int argc, char** argv) {
     return 1;
   }
 
-  matrix = dm2dNew(N+2, N+2);
-  matrix_aux = dm2dNew(N+2, N+2);
+  matrix[0] = dm2dNew(N+2, N+2);
+  matrix[1]= dm2dNew(N+2, N+2);
 
-  if (matrix == NULL || matrix_aux == NULL) {
+  if (matrix[0] == NULL || matrix[1] == NULL) {
     fprintf(stderr, "\nErro: Nao foi possivel alocar memoria para as matrizes.\n\n");
     return -1;
   }
 
   int i, tam_fatia, res;
-  pthread_mutex_t mutex;
-  pthread_cond_t condition;
   pthread_t trabalhadoras[trab];
   thread_info tinfo[trab];
 
-  if(pthread_mutex_init(&mutex, NULL) != 0) {
-    fprintf(stderr, "\nErro ao inicializar mutex\n");
-    return -1;
-  }
-
-  if(pthread_cond_init(&condition, NULL) != 0) {
-    fprintf(stderr, "\nErro ao inicializar variável de condição\n");
-    return -1;
-  }
 
   for(i=0; i<N+2; i++)
-    dm2dSetLineTo(matrix, i, 0);
+    dm2dSetLineTo(matrix[0], i, 0);
 
-  dm2dSetLineTo (matrix, 0, tSup);
-  dm2dSetLineTo (matrix, N+1, tInf);
-  dm2dSetColumnTo (matrix, 0, tEsq);
-  dm2dSetColumnTo (matrix, N+1, tDir);
+  dm2dSetLineTo (matrix[0], 0, tSup);
+  dm2dSetLineTo (matrix[0], N+1, tInf);
+  dm2dSetColumnTo (matrix[0], 0, tEsq);
+  dm2dSetColumnTo (matrix[0], N+1, tDir);
 
-  dm2dCopy (matrix_aux, matrix);
+  dm2dCopy (matrix[1], matrix[0]);
 
-  if (initBarreira(trab, desvio) == -1) {
+  if (initBarreira(trab) == -1) {
     fprintf(stderr, "\nErro a criar barreira\n");
     return -1;
   }
@@ -194,6 +193,7 @@ int main (int argc, char** argv) {
     tinfo[i].N = N;
     tinfo[i].trab = trab;
     tinfo[i].tam_fatia = tam_fatia;
+    tinfo[i].maxD = desvio;
     
     res = pthread_create(&trabalhadoras[i], NULL, tarefa_trabalhadora, &tinfo[i]);
 
@@ -214,11 +214,10 @@ int main (int argc, char** argv) {
     }  
   }
   
+  dm2dPrint(matrix[(tinfo[0].iter_fim +1)% 2]);
 
-  dm2dPrint(matrix);
-
-  dm2dFree(matrix);
-  dm2dFree(matrix_aux);
+  dm2dFree(matrix[0]);
+  dm2dFree(matrix[1]);
   destroyBarreira();
 
   return 0;

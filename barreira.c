@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 /*--------------------------------------------------------------------
 | Types
@@ -10,10 +11,10 @@
 typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t condition;
-    int espera1, espera2;
+    int espera[2];
     int n_threads;
-    int desvio_max;
-    int desvio_fatias, desvio_fatias_temp;
+    int desvio_fatias;
+    int terminar;
 } Stop;
 
 /*--------------------------------------------------------------------
@@ -21,78 +22,104 @@ typedef struct {
 ---------------------------------------------------------------------*/
 Stop *stop;
 
+/*--------------------------------------------------------------------
+| Function: initBarreira
+---------------------------------------------------------------------*/
 
-
-
-int waitBarreira(int iter, int desvio_fatia) {
-	int* espera_activa;
-	pthread_mutex_lock(&stop->mutex);
-
-	if (iter%2==0) {
-		stop->espera1++;
-		espera_activa = &stop->espera1;
-		printf("AAA %d\n", stop->espera1);
-	}
-	else {
-		stop->espera2++;
-		espera_activa = &stop->espera2;
-		printf("BBB %d\n", stop->espera2);
-	}
-
-	printf("CCC %d\n", stop->n_threads);
-	fflush(stdout);
-
-	if (desvio_fatia > stop->desvio_fatias)
-		stop->desvio_fatias = desvio_fatia;
-
-	if ((*espera_activa) == (stop->n_threads)) {
-		stop->desvio_fatias_temp = stop->desvio_fatias;
-		stop->desvio_fatias = -1;
-		*espera_activa = 0;
-		printf("AAASSS\n\n");
-		pthread_cond_broadcast(&stop->condition);
-		printf("AAAABB\n");
-	}
-
-	else {
-		printf("AASDSDSD\n");
-		while (*espera_activa != 0) {
-			pthread_cond_wait(&stop->condition, &stop->mutex);
-		}
-	}
-	pthread_mutex_unlock(&stop->mutex);
-	if (stop->desvio_fatias_temp < stop->desvio_max)
-		return 1;
-	return 0;
-}
-
-
-int initBarreira(int n_threads, int desvio) {
+int initBarreira(int n_threads) {
 	stop = (Stop*) malloc(sizeof(Stop));
 
 	if (stop == NULL) {
-		fprintf(stderr, "Erro ao alocar struct barreira\n");
-		return -1;
+		fprintf(stderr, "Erro ao alocar struct da barreira\n");
+		exit(EXIT_FAILURE);
 	}
 
-	if (pthread_mutex_init(&stop->mutex, NULL) == -1) {
-		fprintf(stderr, "Erro ao inicializar mutex\n");
-		return -1;
+	if(pthread_mutex_init(&(stop->mutex), NULL) != 0) {
+    	fprintf(stderr, "\nErro ao inicializar mutex\n");
+    	exit(EXIT_FAILURE);
+  	}
+
+  	if(pthread_cond_init(&(stop->condition), NULL) != 0) {
+    	fprintf(stderr, "\nErro ao inicializar variável de condição\n");
+    	exit(EXIT_FAILURE);
+  	}
+
+  	stop->espera[0] = 0;
+  	stop->espera[1] = 0;
+  	stop->n_threads = n_threads;
+  	stop->desvio_fatias = 0;
+  	stop->terminar = 0;
+
+  	return 0;
+}
+
+
+/*--------------------------------------------------------------------
+| Function: waitBarreira
+---------------------------------------------------------------------*/
+
+int waitBarreira(int iter, int desvio_fat) {
+
+	if (pthread_mutex_lock(&(stop->mutex)) != 0) {
+		fprintf(stderr, "Erro ao bloquear mutex\n");
+		exit(EXIT_FAILURE);
 	}
 
-	if (pthread_cond_init(&stop->condition, NULL) == -1) {
-		fprintf(stderr, "Erro ao inicializar variavel de condicao\n");
-		return -1;
+	stop->espera[iter%2] = stop->espera[iter%2] +1;
+
+	stop->desvio_fatias += desvio_fat;
+
+	if ((stop->espera[iter%2]) == stop->n_threads) {
+		stop->espera[iter%2] = 0;
+
+
+		if (stop->desvio_fatias == stop->n_threads)
+			stop->terminar = 1;
+		stop->desvio_fatias = 0;
+
+		if (pthread_cond_broadcast(&(stop->condition)) != 0) {
+			fprintf(stderr, "Erro no broadcast\n");
+			exit(EXIT_FAILURE);
+		}
 	}
-	stop->espera1 = 0;
-	stop->espera2 = 0;
-	stop->n_threads = n_threads;
-	stop->desvio_max = desvio;
+	else {
+		while (stop->espera[iter%2] != 0) {
+			if (pthread_cond_wait(&(stop->condition), &(stop->mutex)) != 0) {
+				fprintf(stderr, "Erro no wait\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+	}
+
+	if (stop->terminar) {
+		if (pthread_mutex_unlock(&(stop->mutex)) != 0) {
+			fprintf(stderr, "Erro ao bloquear mutex\n");
+			exit(EXIT_FAILURE);
+		}
+		return 1;
+	}
+
+	if (pthread_mutex_unlock(&(stop->mutex)) != 0) {
+		fprintf(stderr, "Erro ao bloquear mutex\n");
+		exit(EXIT_FAILURE);
+	}
+
 	return 0;
 }
 
+/*--------------------------------------------------------------------
+| Function: destroyBarreira
+---------------------------------------------------------------------*/
+
 void destroyBarreira() {
-	pthread_mutex_destroy(&stop->mutex);
-	pthread_cond_destroy(&stop->condition);
+  if(pthread_mutex_destroy(&(stop->mutex)) != 0) {
+    fprintf(stderr, "\nErro ao destruir mutex\n");
+    exit(EXIT_FAILURE);
+  }
+  
+  if(pthread_cond_destroy(&(stop->condition)) != 0) {
+    fprintf(stderr, "\nErro ao destruir variável de condição\n");
+    exit(EXIT_FAILURE);
+  }
 	free(stop);
 }

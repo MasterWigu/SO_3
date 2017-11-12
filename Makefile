@@ -1,7 +1,7 @@
 # Makefile
 # Sistemas Operativos, DEI/IST/ULisboa 2017-18
 
-CFLAGS= -g -Wall -pedantic -c -fPIC
+CFLAGS= -g -Wall -pedantic -c
 
 heatSim: main.o matrix2d.o barreira.o
 	gcc -pthread -o heatSim main.o matrix2d.o barreira.o
@@ -22,4 +22,4 @@ clean_zip:
 	rm -f *.zip
 
 zip:
-	zip proj1.zip main.c barreira.c barreira.h matrix2d.c matrix2d.h Makefile
+	zip proj3.zip main.c barreira.c barreira.h matrix2d.c matrix2d.h Makefile
