@@ -107,3 +107,7 @@ void dm2dPrint (DoubleMatrix2D *matrix) {
   }
 }
 
+//ola
+void merda() {
+  return 0;
+}
