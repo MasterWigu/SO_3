@@ -106,8 +106,3 @@ void dm2dPrint (DoubleMatrix2D *matrix) {
     printf ("\n");
   }
 }
-
-//ola
-void merda() {
-  return 0;
-}
