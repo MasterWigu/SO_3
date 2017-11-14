@@ -24,6 +24,7 @@ typedef struct {
     int N;
     int trab;
     int tam_fatia;
+    int iter;
     double maxD;
     int iter_fim;
 }thread_info;
@@ -71,7 +72,7 @@ void *tarefa_trabalhadora(void* args) {
   int iter, flag_desvio, retorno;
   double desvio;
 
-  for (iter=0;; iter++) {
+  for (iter=0; iter<= (tinfo->iter) ; iter++) {
     desvio = simul(tinfo->N, tinfo->tam_fatia, tinfo->id, iter);
 
     if (desvio > tinfo->maxD)
@@ -86,8 +87,8 @@ void *tarefa_trabalhadora(void* args) {
       exit(-1);
     }
 
-    if (retorno == 1) {
-      tinfo->iter_fim = iter;
+    if (retorno == 1) { //caso a barreira retorne 1 e para terminar
+      tinfo->iter_fim = iter; //guarda o numero da ultima iteracao
       return NULL;
     }
   }
@@ -132,9 +133,9 @@ double parse_double_or_exit(char const *str, char const *name)
 
 int main (int argc, char** argv) {
 
-  if(argc != 8) {
+  if(argc != 9) {
     fprintf(stderr, "\nNumero invalido de argumentos.\n");
-    fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf trabalhadoras desvioMax\n\n");
+    fprintf(stderr, "Uso: heatSim N tEsq tSup tDir tInf trabalhadoras iteracoes desvioMax\n\n");
     return 1;
   }
 
@@ -145,15 +146,16 @@ int main (int argc, char** argv) {
   double tDir = parse_double_or_exit(argv[4], "tDir");
   double tInf = parse_double_or_exit(argv[5], "tInf");
   int trab = parse_integer_or_exit(argv[6], "trabalhadoras");
-  double desvio = parse_double_or_exit(argv[7], "desvio");
+  int iter = parse_integer_or_exit(argv[7], "iteracoes");
+  double desvio = parse_double_or_exit(argv[8], "desvio");
 
   fprintf(stderr, "\nArgumentos:\n"
-	" N=%d tEsq=%.1f tSup=%.1f tDir=%.1f tInf=%.1f trabalhadoras=%d desvioMax=%.4f\n",
-	N, tEsq, tSup, tDir, tInf, trab, desvio);
+	" N=%d tEsq=%.1f tSup=%.1f tDir=%.1f tInf=%.1f trabalhadoras=%d iteracoes=%d desvioMax=%.4f\n",
+	N, tEsq, tSup, tDir, tInf, trab, iter, desvio);
 
-  if(N < 1 || tEsq < 0 || tSup < 0 || tDir < 0 || tInf < 0 || trab < 1 || desvio < 0) {
+  if(N < 1 || tEsq < 0 || tSup < 0 || tDir < 0 || tInf < 0 || trab < 1 || iter < 1 || desvio < 0) {
     fprintf(stderr, "\nErro: Argumentos invalidos.\n"
-	" Lembrar que N >= 1, temperaturas >= 0, trabalhadoras >= 1, desvio >= 0\n\n");
+	" Lembrar que N >= 1, temperaturas >= 0, trabalhadoras >= 1, iteracoes >=1, desvio >= 0\n\n");
     return 1;
   }
 
@@ -193,6 +195,7 @@ int main (int argc, char** argv) {
     tinfo[i].N = N;
     tinfo[i].trab = trab;
     tinfo[i].tam_fatia = tam_fatia;
+    tinfo[i].iter = iter;
     tinfo[i].maxD = desvio;
     
     res = pthread_create(&trabalhadoras[i], NULL, tarefa_trabalhadora, &tinfo[i]);
@@ -214,7 +217,7 @@ int main (int argc, char** argv) {
     }  
   }
   
-  dm2dPrint(matrix[(tinfo[0].iter_fim +1)% 2]);
+  dm2dPrint(matrix[(tinfo[0].iter_fim +1)% 2]); //vai buscar o numero da ultima iteracao para escolher a matrix a exibir
 
   dm2dFree(matrix[0]);
   dm2dFree(matrix[1]);

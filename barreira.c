@@ -11,10 +11,10 @@
 typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t condition;
-    int espera[2];
+    int n_espera[2]; //numero fatias a espera
     int n_threads;
-    int desvio_fatias;
-    int terminar;
+    int acumul_flags; //acumulador da flag_desvio
+    int terminar; //flag se vai terminar
 } Stop;
 
 /*--------------------------------------------------------------------
@@ -44,10 +44,10 @@ int initBarreira(int n_threads) {
     	exit(EXIT_FAILURE);
   	}
 
-  	stop->espera[0] = 0;
-  	stop->espera[1] = 0;
+  	stop->n_espera[0] = 0;
+  	stop->n_espera[1] = 0;
   	stop->n_threads = n_threads;
-  	stop->desvio_fatias = 0;
+  	stop->acumul_flags = 0;
   	stop->terminar = 0;
 
   	return 0;
@@ -58,32 +58,32 @@ int initBarreira(int n_threads) {
 | Function: waitBarreira
 ---------------------------------------------------------------------*/
 
-int waitBarreira(int iter, int desvio_fat) {
-
+int waitBarreira(int iter, int flag_desvio) {
+	//flag desvio fica 1 se a tarefa puder terminar, 0 se nao
 	if (pthread_mutex_lock(&(stop->mutex)) != 0) {
 		fprintf(stderr, "Erro ao bloquear mutex\n");
 		exit(EXIT_FAILURE);
 	}
 
-	stop->espera[iter%2] = stop->espera[iter%2] +1;
+	stop->n_espera[iter%2] = stop->n_espera[iter%2] +1;
 
-	stop->desvio_fatias += desvio_fat;
+	stop->acumul_flags += flag_desvio;
 
-	if ((stop->espera[iter%2]) == stop->n_threads) {
-		stop->espera[iter%2] = 0;
+	if ((stop->n_espera[iter%2]) == stop->n_threads) { //ultima tarefa a chegar a barreira verifica desvio e faz broadcast
+		stop->n_espera[iter%2] = 0; //reset do contador de threads na barreira
 
 
-		if (stop->desvio_fatias == stop->n_threads)
+		if (stop->acumul_flags == stop->n_threads) //se todas as tarefas puderem terminar, acumul_flags vai estar = a n_threads
 			stop->terminar = 1;
-		stop->desvio_fatias = 0;
+		stop->acumul_flags = 0; //faz reset ao acumulador
 
 		if (pthread_cond_broadcast(&(stop->condition)) != 0) {
 			fprintf(stderr, "Erro no broadcast\n");
 			exit(EXIT_FAILURE);
 		}
 	}
-	else {
-		while (stop->espera[iter%2] != 0) {
+	else { //tarefas 0 a n_threads-1 ficam em espera
+		while (stop->n_espera[iter%2] != 0) {
 			if (pthread_cond_wait(&(stop->condition), &(stop->mutex)) != 0) {
 				fprintf(stderr, "Erro no wait\n");
 				exit(EXIT_FAILURE);
@@ -96,7 +96,7 @@ int waitBarreira(int iter, int desvio_fat) {
 			fprintf(stderr, "Erro ao bloquear mutex\n");
 			exit(EXIT_FAILURE);
 		}
-		return 1;
+		return 1; //retornar 1 para informar a tarefa que deve terminar
 	}
 
 	if (pthread_mutex_unlock(&(stop->mutex)) != 0) {
@@ -104,7 +104,7 @@ int waitBarreira(int iter, int desvio_fat) {
 		exit(EXIT_FAILURE);
 	}
 
-	return 0;
+	return 0; //retornar 0 para continuar a iterar
 }
 
 /*--------------------------------------------------------------------
