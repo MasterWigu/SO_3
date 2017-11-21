@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "matrix2d.h"
+
 /*--------------------------------------------------------------------
 | Types
 ---------------------------------------------------------------------*/
@@ -21,6 +23,7 @@ typedef struct {
 | Global variables
 ---------------------------------------------------------------------*/
 Stop *stop;
+extern DoubleMatrix2D *matrix[2];
 
 /*--------------------------------------------------------------------
 | Function: initBarreira
@@ -72,6 +75,8 @@ int waitBarreira(int iter, int flag_desvio) {
 	if ((stop->n_espera[iter%2]) == stop->n_threads) { //ultima tarefa a chegar a barreira verifica desvio e faz broadcast
 		stop->n_espera[iter%2] = 0; //reset do contador de threads na barreira
 
+		if (dm2dGetEntry(matrix[0], 3, 3)>10 || dm2dGetEntry(matrix[1], 3, 3)>10)
+			stop->terminar = 1;
 
 		if (stop->acumul_flags == stop->n_threads) //se todas as tarefas puderem terminar, acumul_flags vai estar = a n_threads
 			stop->terminar = 1;

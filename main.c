@@ -72,7 +72,7 @@ void *tarefa_trabalhadora(void* args) {
   int iter, flag_desvio, retorno;
   double desvio;
 
-  for (iter=0; iter<= (tinfo->iter) ; iter++) {
+  for (iter=0; iter< (tinfo->iter) ; iter++) {
     desvio = simul(tinfo->N, tinfo->tam_fatia, tinfo->id, iter);
 
     if (desvio > tinfo->maxD)
